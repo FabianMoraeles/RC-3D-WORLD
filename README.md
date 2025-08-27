@@ -1,87 +1,86 @@
-RC-3D-WORLD (Raycasting en Rust + Raylib)
+# RC-3D-WORLD (Raycasting en Rust + Raylib)
 
-Juego tipo raycaster (estilo Doom/Wolf3D) escrito en Rust.
-Renderiza paredes y suelo con texturas, muestra un sprite animado sobre la meta (g), tiene música de fondo y sonido de pasos, y trae pantalla de inicio y pantalla de victoria.
+Proyecto tipo **raycaster** (estilo Wolf3D/Doom clásico) hecho en **Rust** con **raylib**.  
+Incluye texturas para paredes y piso, **menú de inicio**, **pantalla de victoria**, **música de fondo**, **sonido de pasos** y un **sprite animado** sobre la meta (`g`).
 
-Demo rápida
+## Gameplay
 
-Menú: imagen assets/lobby.png. Presiona ENTER para empezar.
+- **Menú**: se muestra `assets/lobby.png`. Presiona **ENTER** para comenzar.
+- **Objetivo**: llega a la celda **`g`** del laberinto (definido en `maze.txt`).
+- **Victoria**: al tocar `g` se muestra `assets/win.png`. Desde allí, **ENTER** vuelve al menú.
+- **Sprite animado**: sobre la `g` se dibuja un sprite que alterna entre `freddy1.png` y `freddy2.png`.
 
-Juego: mueve al jugador por el laberinto hasta llegar a la celda g.
+## Controles
 
-Victoria: se muestra assets/win.png. Presiona ENTER para volver al menú.
+- **W / S** o **↑ / ↓**: avanzar / retroceder  
+- **A / D**: desplazamiento lateral (strafe)  
+- **← / →**: rotación fina  
+- **Mouse**: rotación horizontal  
+- **M**: alterna vista **2D** (debug) / **3D**  
+- **ENTER**: aceptar en Menú y en Victoria
 
-Controles
+---
 
-W / S o ↑ / ↓: avanzar / retroceder
+## Requisitos
 
-A / D: strafe (lateral)
+- **Rust** (estable). Instala con [rustup.rs](https://rustup.rs/).
+- **Toolchain C** (para compilar raylib nativa):
+  - **Windows (MSVC)**: instalar *Visual Studio Build Tools* → C++ build tools.
+  - **Linux**: `build-essential`, `pkg-config`, `libasound2-dev`, `libx11-dev`, `libxrandr-dev`, `libxi-dev`, `libgl1-mesa-dev`, etc.
+  - **macOS**: `xcode-select --install`.
 
-← / →: rotación fina
+> El crate `raylib` compila/trae la lib por ti, pero necesita las herramientas del sistema.
 
-Mouse: rotación horizontal
+## Estructura del proyecto
 
-M: alterna vista 2D (debug) / 3D
-
-ENTER: aceptar en Menú y en Victoria
-
-Requisitos
-
-Rust (estable). Instala con rustup
-.
-
-Compilador C (para compilar raylib nativa):
-
-Windows (MSVC): instala Visual Studio Build Tools (C++ tools).
-
-Linux: build-essential, pkg-config, libasound2-dev, libx11-dev, libxrandr-dev, libxi-dev, libgl1-mesa-dev, etc.
-
-macOS: xcode-select --install.
-
-No necesitas instalar raylib manualmente: el crate raylib compila la lib por ti (asegúrate de tener toolchain C).
-
-Estructura del proyecto
 .
 ├─ Cargo.toml
 ├─ maze.txt
 ├─ src/
-│  ├─ main.rs
-│  ├─ caster.rs
-│  ├─ framebuffer.rs
-│  ├─ line.rs
-│  ├─ maze.rs
-│  └─ player.rs
+│ ├─ main.rs
+│ ├─ caster.rs
+│ ├─ framebuffer.rs
+│ ├─ line.rs
+│ ├─ maze.rs
+│ └─ player.rs
 └─ assets/
-   ├─ wall.png
-   ├─ floor.png
-   ├─ lobby.png          # pantalla de inicio
-   ├─ win.png            # pantalla de victoria
-   ├─ background.ogg     # música (ogg/mp3/ wav, uno es suficiente)
-   ├─ footstep.wav       # pasos
-   ├─ freddy1.png        # sprite frame 1 (sobre la 'g')
-   └─ freddy2.png        # sprite frame 2 (sobre la 'g')
+├─ wall.png
+├─ floor.png
+├─ lobby.png # pantalla de inicio
+├─ win.png # pantalla de victoria
+├─ background.ogg # música (puede ser .mp3 también)
+├─ footstep.wav # sonido de pasos
+├─ freddy1.png # sprite frame 1 (sobre la 'g')
+└─ freddy2.png # sprite frame 2 (sobre la 'g')
 
+markdown
+Copiar código
 
-Si no tienes la carpeta assets/, créala en la raíz del repo y coloca ahí todas las imágenes y audio.
+> Asegúrate de **crear la carpeta `assets/`** y colocar todos los archivos indicados.
 
-maze.txt de ejemplo
-
-El proyecto ya funciona con este laberinto (la g es la meta):
+## `maze.txt` de ejemplo
 
 +--+--+--+--+
-|           |
-+  +--+  +  +
-|  |     |  |
-+  +  +--+--+
-|  |        |
-+  +--+--+  +
-|        | g|
+| |
+
++--+ + +
+| | | |
+
++--+--+
+| | |
+
++--+--+ +
+| | g|
 +--+--+--+--+
 
-Configuración en Cargo.toml
+pgsql
+Copiar código
 
-Ejemplo mínimo (ajústalo si ya lo tienes):
+## `Cargo.toml` (ejemplo)
 
+> Usa tu edición preferida (2021/2024). Ajusta si ya lo tienes uno.
+
+```toml
 [package]
 name = "computer-graphics-v3"
 version = "0.1.0"
@@ -94,9 +93,16 @@ debug = false
 [dependencies]
 raylib = "5.5.1"
 image = { version = "0.25.6", default-features = false, features = ["png"] }
+Cómo ejecutar
+bash
+Copiar código
+# en la raíz del proyecto
+cargo run
+Para más rendimiento:
 
-
-Nota: la API de audio se usa vía RaylibAudio (no requiere feature especial en el crate raylib 5.5.x).
+bash
+Copiar código
+cargo run --release
 
 Cómo correr
 # desde la carpeta del proyecto
