@@ -3,6 +3,10 @@
 Proyecto tipo **raycaster** (estilo Wolf3D/Doom clásico) hecho en **Rust** con **raylib**.  
 Incluye texturas para paredes y piso, **menú de inicio**, **pantalla de victoria**, **música de fondo**, **sonido de pasos** y un **sprite animado** sobre la meta (`g`).
 
+## AUDIO
+Se utiliza una canción de FNAF sampleada con la voz de Taylor Swift, debería contar :D
+Link: https://www.youtube.com/watch?v=rZL9Xzpto3A&list=RDrZL9Xzpto3A&start_radio=1
+
 ## Gameplay
 
 - **Menú**: se muestra `assets/lobby.png`. Presiona **ENTER** para comenzar.
