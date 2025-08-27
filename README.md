@@ -12,6 +12,7 @@ Incluye texturas para paredes y piso, **menú de inicio**, **pantalla de victori
 
 ## Controles
 
+Teclado y ratón
 - **W / S** o **↑ / ↓**: avanzar / retroceder  
 - **A / D**: desplazamiento lateral (strafe)  
 - **← / →**: rotación fina  
@@ -19,6 +20,13 @@ Incluye texturas para paredes y piso, **menú de inicio**, **pantalla de victori
 - **M**: alterna vista **2D** (debug) / **3D**  
 - **ENTER**: aceptar en Menú y en Victoria
 
+Control de Xbox
+
+Stick izquierdo: Mover (adelante/atrás y strafe)
+
+Stick derecho (X): Girar cámara
+
+A: Aceptar/Comenzar en menús, Alternar 2D/3D en juego
 ---
 
 ## Requisitos
