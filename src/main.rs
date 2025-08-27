@@ -16,10 +16,12 @@ use image::{ImageReader, GenericImageView};
 
 use raylib::prelude::*;
 use raylib::core::audio::{RaylibAudio, Sound};
+use raylib::consts::{GamepadAxis, GamepadButton};
+
 use std::f32::consts::PI;
 use std::time::{Duration, Instant};
 
-// ===== Helpers de imágenes crudas (para texturas/sprites) =====
+// ===== Helpers: cargar imágenes RGBA sin raylib (para texturas/sprites) =====
 fn load_image_rgba(path: &str) -> (Vec<u8>, usize, usize) {
     let img = ImageReader::open(path)
         .unwrap_or_else(|_| panic!("No se pudo abrir {}", path))
@@ -29,7 +31,7 @@ fn load_image_rgba(path: &str) -> (Vec<u8>, usize, usize) {
     (img.to_rgba8().into_raw(), w as usize, h as usize)
 }
 
-// Buscar la celda 'g' y devolver su centro en coords de mundo
+// Ubicar la celda 'g' y devolver su centro en coordenadas del mundo
 fn find_goal_center(maze: &Maze, block_size: usize) -> Option<(f32, f32)> {
     for (j, row) in maze.iter().enumerate() {
         for (i, &c) in row.iter().enumerate() {
@@ -63,25 +65,29 @@ fn process_events_enhanced(
     const ROT_SPEED: f32 = PI / 50.0;
     const FOOTSTEP_INTERVAL: f32 = 0.4;
 
+    // Teclado: rotación fina
     if rl.is_key_down(KeyboardKey::KEY_LEFT)  { player.a += ROT_SPEED; }
     if rl.is_key_down(KeyboardKey::KEY_RIGHT) { player.a -= ROT_SPEED; }
 
+    // Dirección y perpendicular (para strafe)
     let dir_x = player.a.cos();
     let dir_y = player.a.sin();
     let perp_x = -dir_y;
     let perp_y =  dir_x;
 
+    // Entrada acumulada
     let mut move_x = 0.0;
     let mut move_y = 0.0;
     let mut is_moving = false;
 
+    // Teclado: W/S
     if rl.is_key_down(KeyboardKey::KEY_W) || rl.is_key_down(KeyboardKey::KEY_UP) {
         move_x += dir_x * MOVE_SPEED; move_y += dir_y * MOVE_SPEED; is_moving = true;
     }
     if rl.is_key_down(KeyboardKey::KEY_S) || rl.is_key_down(KeyboardKey::KEY_DOWN) {
         move_x -= dir_x * MOVE_SPEED; move_y -= dir_y * MOVE_SPEED; is_moving = true;
     }
-    // Strafe (invertidos según tu versión)
+    // Teclado: A/D (invertidos según tu versión previa)
     if rl.is_key_down(KeyboardKey::KEY_A) {
         move_x -= perp_x * MOVE_SPEED; move_y -= perp_y * MOVE_SPEED; is_moving = true;
     }
@@ -89,6 +95,29 @@ fn process_events_enhanced(
         move_x += perp_x * MOVE_SPEED; move_y += perp_y * MOVE_SPEED; is_moving = true;
     }
 
+    // ===== Gamepad (pad 0) =====
+    if rl.is_gamepad_available(0) {
+        let deadzone = 0.20;
+
+        // Stick izquierdo -> mover (Y hacia delante es negativo)
+        let lx = rl.get_gamepad_axis_movement(0, GamepadAxis::GAMEPAD_AXIS_LEFT_X);
+        let ly = rl.get_gamepad_axis_movement(0, GamepadAxis::GAMEPAD_AXIS_LEFT_Y);
+        let ax = if lx.abs() > deadzone { lx } else { 0.0 };
+        let ay = if ly.abs() > deadzone { ly } else { 0.0 };
+
+        // Combinar avance/retro (dir) + strafe (perp)
+        move_x += (dir_x * -ay + perp_x * ax) * MOVE_SPEED;
+        move_y += (dir_y * -ay + perp_y * ax) * MOVE_SPEED;
+        if ax != 0.0 || ay != 0.0 { is_moving = true; }
+
+        // Stick derecho X -> rotación
+        let rx = rl.get_gamepad_axis_movement(0, GamepadAxis::GAMEPAD_AXIS_RIGHT_X);
+        if rx.abs() > deadzone {
+            player.a += rx * 0.05; // sensibilidad giro stick derecho
+        }
+    }
+
+    // Aplicar movimiento con colisión
     let new_x = player.pos.x + move_x;
     let new_y = player.pos.y + move_y;
 
@@ -96,6 +125,7 @@ fn process_events_enhanced(
     if can_move(new_x, player.pos.y, maze, block_size) { player.pos.x = new_x; moved = true; }
     if can_move(player.pos.x, new_y, maze, block_size) { player.pos.y = new_y; moved = true; }
 
+    // Sonido de pasos
     if moved && is_moving {
         let now = Instant::now();
         if (now - *last_footstep_time).as_secs_f32() > FOOTSTEP_INTERVAL {
@@ -155,29 +185,24 @@ fn draw_sprite_billboard(
     world_x: f32, world_y: f32,
     scale: f32,
 ) {
-    // Vector desde el jugador al sprite
     let spr_x = world_x - player.pos.x;
     let spr_y = world_y - player.pos.y;
 
-    // Transformación a espacio de cámara
     let inv_det = 1.0 / (plane_x * dir_y - dir_x * plane_y);
     let trans_x = inv_det * (dir_y * spr_x - dir_x * spr_y);
     let trans_y = inv_det * (-plane_y * spr_x + plane_x * spr_y);
-    if trans_y <= 0.0001 { return; } // detrás del jugador
+    if trans_y <= 0.0001 { return; }
 
     let screen_w = framebuffer.width as i32;
     let screen_h = framebuffer.height as i32;
     let hh = framebuffer.height as f32 / 2.0;
     let dp = 70.0;
 
-    // Centro X en pantalla
     let sprite_screen_x = (framebuffer.width as f32 / 2.0) * (1.0 + trans_x / trans_y);
 
-    // Altura/anchura proyectadas (cuadrado)
     let mut sprite_h = (hh / trans_y) * dp * scale;
     let mut sprite_w = sprite_h;
 
-    // Bounds de dibujo
     let mut draw_start_y = (hh - sprite_h / 2.0).round() as i32;
     let mut draw_end_y   = (hh + sprite_h / 2.0).round() as i32;
     let mut draw_start_x = (sprite_screen_x - sprite_w / 2.0).round() as i32;
@@ -192,30 +217,26 @@ fn draw_sprite_billboard(
     let span_x = (draw_end_x - draw_start_x).max(1) as f32;
 
     for stripe in draw_start_x..=draw_end_x {
-        // Profundidad contra paredes (ocultación)
         let z = trans_y;
         if stripe < 0 || stripe as usize >= zbuffer.len() { continue; }
         if z >= zbuffer[stripe as usize] { continue; }
 
-        // Coordenada U en la textura
         let tex_x = (((stripe - draw_start_x) as f32 / span_x) * sw as f32) as usize;
         if tex_x >= sw { continue; }
 
         for y in draw_start_y..=draw_end_y {
-            // Coordenada V
             let tex_y = (((y - draw_start_y) as f32 / span_y) * sh as f32) as usize;
             if tex_y >= sh { continue; }
 
             let idx = (tex_y * sw + tex_x) * 4;
             if idx + 3 >= sprite_rgba.len() { continue; }
             let a = sprite_rgba[idx + 3];
-            if a < 16 { continue; } // transparencia
+            if a < 16 { continue; }
 
             let r = sprite_rgba[idx];
             let g = sprite_rgba[idx + 1];
             let b = sprite_rgba[idx + 2];
 
-            // leve atenuación por distancia
             let shade = (1.0 / (1.0 + z * 0.01)).min(1.0);
             let sr = (r as f32 * shade) as u8;
             let sg = (g as f32 * shade) as u8;
@@ -241,7 +262,6 @@ fn render_world(
     let hh = framebuffer.height as f32 / 2.0;
     let screen_h = framebuffer.height as i32;
 
-    // Cámara
     let dir_x = player.a.cos();
     let dir_y = player.a.sin();
     let plane_scale = (player.fov * 0.5).tan();
@@ -249,7 +269,6 @@ fn render_world(
     let plane_y =  dir_x * plane_scale;
     let pos_z = hh * 0.8;
 
-    // Z-buffer (distancia perpendicular por columna)
     let mut zbuffer = vec![f32::INFINITY; num_rays as usize];
 
     for i in 0..num_rays {
@@ -257,16 +276,14 @@ fn render_world(
         let a = player.a - (player.fov / 2.0) + (player.fov * t);
         let intersect = cast_ray(framebuffer, maze, player, a, block_size, false);
 
-        // Para ocultación con sprites: distancia perpendicular
         let perp = (player.a - a).cos().abs().max(0.0001) * intersect.distance.max(0.0001);
         zbuffer[i as usize] = perp;
 
-        // Dirección de ese rayo (para floor casting por fila)
         let camera_x = 2.0 * (i as f32) / (num_rays as f32) - 1.0;
         let ray_dir_x = dir_x + plane_x * camera_x;
         let ray_dir_y = dir_y + plane_y * camera_x;
 
-        // === PAREDES ===
+        // Paredes
         let distance = intersect.distance.max(0.0001);
         let distance_to_projection_plane = 70.0;
         let stake_height = (hh / distance) * distance_to_projection_plane;
@@ -277,7 +294,6 @@ fn render_world(
         if top < 0 { top = 0; }
         if bottom > hmax { bottom = hmax; }
 
-        // Coordenada de textura del impacto
         let hit_x = player.pos.x + distance * a.cos();
         let hit_y = player.pos.y + distance * a.sin();
         let wall_x = if ((hit_x % block_size as f32) - block_size as f32 / 2.0).abs()
@@ -311,7 +327,7 @@ fn render_world(
             }
         }
 
-        // === SUELO ===
+        // Suelo
         for y in (bottom + 1)..screen_h {
             let p = (y as f32) - hh;
             if p.abs() < 0.1 { continue; }
@@ -342,9 +358,8 @@ fn render_world(
         }
     }
 
-    // === SPRITE ANIMADO SOBRE LA 'g' ===
+    // Sprite animado sobre 'g'
     if let Some((gx, gy)) = goal_pos {
-        // Ajusta escala si quieres el tamaño del sprite (1.0 = similar a pared)
         let sprite_scale = 1.0;
         draw_sprite_billboard(
             framebuffer,
@@ -359,7 +374,7 @@ fn render_world(
     }
 }
 
-// ======= MAIN (con menú / victoria y sprite animado) =======
+// ======= MAIN (menú / juego / victoria + gamepad) =======
 fn main() {
     let window_width = 1300;
     let window_height = 900;
@@ -367,7 +382,7 @@ fn main() {
 
     let (mut window, thread) = raylib::init()
         .size(window_width, window_height)
-        .title("Raycaster - Sprite animado en 'g'")
+        .title("Raycaster - Gamepad Ready")
         .log_level(TraceLogLevel::LOG_WARNING)
         .build();
 
@@ -380,11 +395,13 @@ fn main() {
         .new_music("assets/background.ogg")
         .or_else(|_| audio.new_music("assets/background.mp3"))
         .expect("musica");
+    music.set_volume(0.4);
     music.play_stream();
 
-    // Framebuffer / escenario / jugador
+    // Framebuffer / mundo / jugador
     let mut fb = Framebuffer::new(window_width as u32, window_height as u32);
     fb.set_background_color(Color::BLACK);
+
     let maze = load_maze("maze.txt");
     let goal_center = find_goal_center(&maze, block_size);
 
@@ -398,14 +415,13 @@ fn main() {
     let (wall_rgba, wall_w, wall_h) = load_image_rgba("assets/wall.png");
     let (floor_rgba, floor_w, floor_h) = load_image_rgba("assets/floor.png");
 
-    // Lobby y Win
+    // Imágenes de menú y victoria
     let lobby_tex = window.load_texture(&thread, "assets/lobby.png").expect("assets/lobby.png");
     let win_tex = window.load_texture(&thread, "assets/win.png").ok();
 
-    // SPRITES: freddy1 / freddy2
+    // Sprites animados (sobre 'g')
     let (spr1_rgba, spr1_w, spr1_h) = load_image_rgba("assets/freddy1.png");
     let (spr2_rgba, spr2_w, spr2_h) = load_image_rgba("assets/freddy2.png");
-    // Asegura mismo tamaño para que el cambio sea perfecto (no obligatorio)
     let mut use_spr1 = true;
     let mut last_anim = Instant::now();
     let anim_interval = Duration::from_millis(250);
@@ -421,7 +437,12 @@ fn main() {
 
         match state {
             GameState::Menu => {
-                if window.is_key_pressed(KeyboardKey::KEY_ENTER) {
+                let start_pressed =
+                    window.is_key_pressed(KeyboardKey::KEY_ENTER) ||
+                    window.is_gamepad_button_pressed(0, GamepadButton::GAMEPAD_BUTTON_MIDDLE_RIGHT) || // START
+                    window.is_gamepad_button_pressed(0, GamepadButton::GAMEPAD_BUTTON_RIGHT_FACE_DOWN); // A
+
+                if start_pressed {
                     window.set_mouse_position(Vector2::new(window_width as f32 / 2.0, window_height as f32 / 2.0));
                     state = GameState::Playing;
                     continue;
@@ -430,7 +451,6 @@ fn main() {
                 let mut d = window.begin_drawing(&thread);
                 d.clear_background(Color::BLACK);
 
-                // Lobby centrado
                 let tw = lobby_tex.width() as f32;
                 let th = lobby_tex.height() as f32;
                 let sw = window_width as f32;
@@ -445,12 +465,14 @@ fn main() {
                     Rectangle::new(dx, dy, dw, dh),
                     Vector2::new(0.0, 0.0), 0.0, Color::WHITE);
 
-                
+                let txt = "Presiona A";
+                let size = 28;
+                let wtxt = d.measure_text(txt, size);
+                d.draw_text(txt, (window_width - wtxt) / 2, window_height - 60, size, Color::RAYWHITE);
                 d.draw_fps(10, 10);
             }
 
             GameState::Playing => {
-                // Animar sprite
                 if Instant::now() - last_anim >= anim_interval {
                     use_spr1 = !use_spr1;
                     last_anim = Instant::now();
@@ -458,9 +480,12 @@ fn main() {
 
                 fb.clear();
 
-                if window.is_key_pressed(KeyboardKey::KEY_M) { mode_2d = !mode_2d; }
+                let toggle_view =
+                    window.is_key_pressed(KeyboardKey::KEY_M) ||
+                    window.is_gamepad_button_pressed(0, GamepadButton::GAMEPAD_BUTTON_RIGHT_FACE_DOWN); // A
+                if toggle_view { mode_2d = !mode_2d; }
 
-                // Rotación por mouse
+                // Rotación con mouse (opcional si se usa gamepad)
                 let mouse = window.get_mouse_position();
                 let cx = window_width as f32 / 2.0;
                 let dx = mouse.x - cx;
@@ -481,7 +506,6 @@ fn main() {
                     continue;
                 }
 
-                // Elegir frame del sprite
                 let (spr_rgba, sw, sh) = if use_spr1 {
                     (&spr1_rgba, spr1_w, spr1_h)
                 } else {
@@ -504,7 +528,11 @@ fn main() {
             }
 
             GameState::Win => {
-                if window.is_key_pressed(KeyboardKey::KEY_ENTER) {
+                let accept =
+                    window.is_key_pressed(KeyboardKey::KEY_ENTER) ||
+                    window.is_gamepad_button_pressed(0, GamepadButton::GAMEPAD_BUTTON_MIDDLE_RIGHT) || // START
+                    window.is_gamepad_button_pressed(0, GamepadButton::GAMEPAD_BUTTON_RIGHT_FACE_DOWN); // A
+                if accept {
                     state = GameState::Menu;
                     player.pos = Vector2::new(150.0, 150.0);
                     player.a = PI / 3.0;
@@ -530,7 +558,7 @@ fn main() {
                         Vector2::new(0.0, 0.0), 0.0, Color::WHITE);
                 } else {
                     let title = "¡VICTORIA!";
-                    let prompt = "Presiona ENTER para continuar";
+                    let prompt = "Presiona A";
                     let ts = 48; let ps = 24;
                     let tw = d.measure_text(title, ts);
                     let pw = d.measure_text(prompt, ps);
@@ -545,7 +573,5 @@ fn main() {
 
     music.stop_stream();
 }
-
-
 
 //HOLAAAAAAAAAAAAAAAAAA
